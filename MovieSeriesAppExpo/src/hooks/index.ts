@@ -1,0 +1,1 @@
+// This file exports custom hooks that can be used throughout the application for state management or side effects.
