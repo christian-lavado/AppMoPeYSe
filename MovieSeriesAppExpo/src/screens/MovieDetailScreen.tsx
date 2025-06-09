@@ -3,19 +3,23 @@ import {
   View,
   Text,
   Image,
-  ScrollView,
+  StyleSheet,
   TouchableOpacity,
-  Alert,
+  ScrollView,
   Modal,
   TextInput,
-  StyleSheet,
+  Alert,
+  Animated,
+  Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Movie, WatchedItem } from '../types';
-import { RootStackParamList } from '../navigation/AppNavigator';
-import Constants from 'expo-constants';
-import { storageService as databaseService } from '../services/storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { RootStackParamList } from '../navigation/AppNavigator';
+import { storageService } from '../services/storage';
+import { WatchedItem, SavedItem } from '../types';
+import Constants from 'expo-constants';
+import { useTheme } from '../styles/ThemeContext';
 
 type MovieDetailScreenProps = NativeStackScreenProps<RootStackParamList, 'MovieDetail'>;
 
@@ -25,121 +29,174 @@ export const MovieDetailScreen: React.FC<MovieDetailScreenProps> = ({ route, nav
   const { movie } = route.params;
   const [isWatched, setIsWatched] = useState(false);
   const [watchedItem, setWatchedItem] = useState<WatchedItem | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [rating, setRating] = useState(5);
   const [review, setReview] = useState('');
+  const [watchedDate, setWatchedDate] = useState<Date>(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const scaleAnim = new Animated.Value(1);
+  const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
+
+  const { theme } = useTheme();
 
   useEffect(() => {
     checkIfWatched();
+    checkIfSaved();
   }, []);
 
   const checkIfWatched = async () => {
     try {
-      const item = await databaseService.getWatchedItem(movie.id, 'movie');
-      if (item) {
+      const watchedItems = await storageService.getWatchedItems();
+      const existingItem = watchedItems.find(item => item.id === movie.id && item.type === 'movie');
+      if (existingItem) {
         setIsWatched(true);
-        setWatchedItem(item);
-        setRating(item.user_rating);
-        setReview(item.user_review);
+        setWatchedItem(existingItem);
+        setRating(existingItem.rating);
+        setReview(existingItem.review || '');
+        setWatchedDate(existingItem.watchedDate ? new Date(existingItem.watchedDate) : new Date());
       }
     } catch (error) {
-      console.log('Error checking watched status:', error);
+      console.error('Error checking watched status:', error);
     }
+  };
+
+  const checkIfSaved = async () => {
+    const savedItems = await storageService.getSavedItems();
+    setIsSaved(savedItems.some(item => item.id === movie.id && item.type === 'movie'));
   };
 
   const handleMarkAsWatched = () => {
     setModalVisible(true);
+    setWatchedDate(new Date());
   };
 
-  const saveWatchedMovie = async () => {
+  const handleSaveWatched = async () => {
     try {
-      const watchedData = {
-        tmdb_id: movie.id,
+      const newWatchedItem: WatchedItem = {
+        id: movie.id,
         title: movie.title,
-        type: 'movie' as const,
-        poster_path: movie.poster_path,
-        user_rating: rating,
-        user_review: review,
-        watched_date: new Date().toISOString().split('T')[0],
+        type: 'movie',
+        posterPath: movie.poster_path,
+        rating,
+        review: review.trim(),
+        watchedDate: watchedDate.toISOString(),
       };
 
-      if (isWatched && watchedItem) {
-        await databaseService.updateWatchedItem(watchedItem.id, watchedData);
-      } else {
-        await databaseService.addWatchedItem(watchedData);
-      }
-
+      await storageService.addWatchedItem(newWatchedItem);
       setIsWatched(true);
+      setWatchedItem(newWatchedItem);
       setModalVisible(false);
-      Alert.alert('Éxito', 'Película guardada correctamente');
-      checkIfWatched();
+      // Eliminar de guardados si estaba guardado
+      await storageService.removeIfSaved(movie.id, 'movie');
+      setIsSaved(false);
+      Alert.alert('¡Listo!', 'Película marcada como vista');
     } catch (error) {
       Alert.alert('Error', 'No se pudo guardar la película');
     }
   };
 
-  const removeFromWatched = async () => {
+  const handleEditWatched = () => {
+    setModalVisible(true);
+    setWatchedDate(watchedItem?.watchedDate ? new Date(watchedItem.watchedDate) : new Date());
+  };
+
+  const handleUpdateWatched = async () => {
     if (!watchedItem) return;
 
-    Alert.alert(
-      'Confirmar',
-      '¿Estás seguro de que quieres eliminar esta película de tu lista?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await databaseService.deleteWatchedItem(watchedItem.id);
-              setIsWatched(false);
-              setWatchedItem(null);
-              Alert.alert('Éxito', 'Película eliminada de tu lista');
-            } catch (error) {
-              Alert.alert('Error', 'No se pudo eliminar la película');
-            }
-          },
-        },
-      ]
-    );
+    try {
+      const updatedItem: WatchedItem = {
+        ...watchedItem,
+        rating,
+        review: review.trim(),
+        watchedDate: watchedDate.toISOString(),
+      };
+
+      await storageService.updateWatchedItem(updatedItem);
+      setWatchedItem(updatedItem);
+      setModalVisible(false);
+      Alert.alert('¡Actualizado!', 'Tu reseña ha sido guardada');
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo actualizar la reseña');
+    }
+  };
+
+  const handleRemoveWatched = async () => {
+    if (!watchedItem) return;
+    try {
+      await storageService.removeWatchedItem(watchedItem.id, 'movie');
+      setIsWatched(false);
+      setWatchedItem(null);
+      setRating(5);
+      setReview('');
+    } catch (error) {
+      console.error('Error eliminando película:', error);
+    }
+  };
+
+  const handleSaveForLater = async () => {
+    const item: SavedItem = {
+      id: movie.id,
+      type: 'movie',
+      title: movie.title,
+      posterPath: movie.poster_path,
+    };
+    await storageService.addSavedItem(item);
+    setIsSaved(true);
+    Alert.alert('Guardado', 'Película guardada para ver más tarde');
+  };
+
+  const handleRemoveSaved = async () => {
+    await storageService.removeSavedItem(movie.id, 'movie');
+    setIsSaved(false);
+    Alert.alert('Eliminado', 'Película eliminada de guardados');
+  };
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.97,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
   };
 
   const renderStars = (currentRating: number, onPress?: (rating: number) => void) => {
-    return (
-      <View style={styles.starsContainer}>
-        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
-          <TouchableOpacity
-            key={star}
-            onPress={() => onPress && onPress(star)}
-            disabled={!onPress}
-          >
-            <Text style={[styles.star, { color: star <= currentRating ? '#FFD700' : '#ccc' }]}>
-              ⭐
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
+    return Array.from({ length: 10 }, (_, index) => (
+      <TouchableOpacity
+        key={index}
+        onPress={() => onPress && onPress(index + 1)}
+        disabled={!onPress}
+      >
+        <Text style={[styles.star, { color: index < currentRating ? theme.accent : theme.textSecondary }]}>
+          ★
+        </Text>
+      </TouchableOpacity>
+    ));
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['left', 'right']}>
-      <ScrollView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Text style={styles.backButtonText}>← Volver</Text>
-          </TouchableOpacity>
+    <SafeAreaView edges={['left', 'right']} style={[styles.container, { backgroundColor: theme.background }]}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Backdrop */}
+        <View style={styles.backdropContainer}>
+          <Image
+            source={{
+              uri: movie.backdrop_path
+                ? `${TMDB_IMAGE_BASE_URL}${movie.backdrop_path}`
+                : `${TMDB_IMAGE_BASE_URL}${movie.poster_path}`,
+            }}
+            style={styles.backdrop}
+          />
+          <View style={styles.backdropOverlay} />
         </View>
 
-        <Image
-          source={{
-            uri: movie.backdrop_path
-              ? `${TMDB_IMAGE_BASE_URL}${movie.backdrop_path}`
-              : `${TMDB_IMAGE_BASE_URL}${movie.poster_path}`,
-          }}
-          style={styles.backdrop}
-        />
-
+        {/* Contenido principal */}
         <View style={styles.content}>
           <View style={styles.movieInfo}>
             <Image
@@ -151,85 +208,204 @@ export const MovieDetailScreen: React.FC<MovieDetailScreenProps> = ({ route, nav
               style={styles.poster}
             />
             <View style={styles.details}>
-              <Text style={styles.title}>{movie.title}</Text>
-              <Text style={styles.releaseDate}>Estreno: {movie.release_date}</Text>
-              <Text style={styles.rating}>⭐ {movie.vote_average.toFixed(1)}/10</Text>
-              <Text style={styles.voteCount}>({movie.vote_count} votos)</Text>
+              <Text style={[styles.title, { color: theme.text }]}>{movie.title}</Text>
+              <Text style={[styles.releaseDate, { color: theme.textSecondary }]}>
+                {movie.release_date ? new Date(movie.release_date).getFullYear() : 'N/A'}
+              </Text>
+              <View style={styles.ratingContainer}>
+                <Text style={[styles.rating, { color: theme.accent }]}>⭐ {movie.vote_average.toFixed(1)}</Text>
+                <Text style={[styles.voteCount, { color: theme.textSecondary }]}>({movie.vote_count} votos)</Text>
+              </View>
             </View>
           </View>
 
-          <Text style={styles.overview}>{movie.overview}</Text>
+          {/* Sinopsis */}
+          <View style={styles.overviewSection}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Sinopsis</Text>
+            <Text style={[styles.overview, { color: theme.textSecondary }]}>
+              {movie.overview || 'No hay sinopsis disponible.'}
+            </Text>
+          </View>
 
+          {/* Información de vista */}
           {isWatched && watchedItem && (
-            <View style={styles.watchedInfo}>
-              <Text style={styles.watchedTitle}>Tu valoración:</Text>
-              {renderStars(watchedItem.user_rating)}
-              <Text style={styles.userRating}>{watchedItem.user_rating}/10</Text>
-              {watchedItem.user_review && (
+            <View style={[styles.watchedInfo, { backgroundColor: theme.overlay }]}>
+              <Text style={[styles.watchedTitle, { color: theme.text }]}>Tu Reseña</Text>
+              <View style={styles.starsContainer}>
+                {renderStars(watchedItem.rating)}
+              </View>
+              <Text style={[styles.userRating, { color: theme.accent }]}>
+                Tu calificación: {watchedItem.rating}/10
+              </Text>
+              {watchedItem.review && (
                 <>
-                  <Text style={styles.reviewTitle}>Tu reseña:</Text>
-                  <Text style={styles.userReview}>{watchedItem.user_review}</Text>
+                  <Text style={[styles.reviewTitle, { color: theme.text }]}>Tu comentario:</Text>
+                  <Text style={[styles.userReview, { color: theme.textSecondary }]}>{watchedItem.review}</Text>
                 </>
               )}
-              <Text style={styles.watchedDate}>
-                Visto el: {new Date(watchedItem.watched_date).toLocaleDateString()}
+              <Text style={[styles.watchedDate, { color: theme.textSecondary }]}>
+                Visto el {new Date(watchedItem.watchedDate).toLocaleDateString('es-ES')}
               </Text>
             </View>
           )}
 
+          {/* Botones */}
           <View style={styles.buttonContainer}>
-            {isWatched ? (
-              <>
-                <TouchableOpacity style={styles.editButton} onPress={handleMarkAsWatched}>
-                  <Text style={styles.buttonText}>Editar valoración</Text>
+            {!isWatched ? (
+            <>
+              <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+                <TouchableOpacity
+                  style={[styles.watchedButton, { backgroundColor: theme.accent }]}
+                  onPress={handleMarkAsWatched}
+                  onPressIn={handlePressIn}
+                  onPressOut={handlePressOut}
+                  activeOpacity={0.9}
+                >
+                  <Text style={styles.buttonText}>Marcar como Vista</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.removeButton} onPress={removeFromWatched}>
-                  <Text style={styles.buttonText}>Eliminar de lista</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <TouchableOpacity style={styles.watchedButton} onPress={handleMarkAsWatched}>
-                <Text style={styles.buttonText}>Marcar como vista</Text>
+              </Animated.View>
+              <TouchableOpacity
+                style={[
+                  styles.watchedButton,
+                  { backgroundColor: isSaved ? '#dc3545' : theme.accent, marginTop: 12 },
+                ]}
+                onPress={isSaved ? handleRemoveSaved : handleSaveForLater}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.buttonText}>
+                  {isSaved ? 'Eliminar de Guardados' : 'Guardar para ver'}
+                </Text>
               </TouchableOpacity>
+            </>
+          ) : (
+              <View style={styles.actionButtons}>
+                <Animated.View style={[styles.buttonFlex, { transform: [{ scale: scaleAnim }] }]}>
+                  <TouchableOpacity
+                    style={[styles.editButton, { backgroundColor: '#28a745' }]}
+                    onPress={handleEditWatched}
+                    onPressIn={handlePressIn}
+                    onPressOut={handlePressOut}
+                    activeOpacity={0.9}
+                  >
+                    <Text style={styles.buttonText}>Editar Reseña</Text>
+                  </TouchableOpacity>
+                </Animated.View>
+                <Animated.View style={[styles.buttonFlex, { transform: [{ scale: scaleAnim }] }]}>
+                  <TouchableOpacity
+                    style={[styles.removeButton, { backgroundColor: '#dc3545' }]}
+                    onPress={() => setConfirmDeleteVisible(true)}
+                    activeOpacity={0.9}
+                  >
+                    <Text style={styles.buttonText}>Eliminar</Text>
+                  </TouchableOpacity>
+                </Animated.View>
+              </View>
             )}
           </View>
         </View>
+      </ScrollView>
 
-        <Modal visible={modalVisible} animationType="slide" transparent>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>
-                {isWatched ? 'Editar valoración' : 'Marcar como vista'}
-              </Text>
-
-              <Text style={styles.ratingLabel}>Puntuación (1-10):</Text>
+      {/* Modal de calificación */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
+              {isWatched ? 'Editar Reseña' : 'Calificar Película'}
+            </Text>
+            <Text style={[styles.ratingLabel, { color: theme.text }]}>Calificación (1-10):</Text>
+            <View style={styles.starsContainer}>
               {renderStars(rating, setRating)}
-
-              <Text style={styles.reviewLabel}>Reseña (opcional):</Text>
-              <TextInput
-                style={styles.reviewInput}
-                value={review}
-                onChangeText={setReview}
-                placeholder="Escribe tu opinión sobre la película..."
-                multiline
-                numberOfLines={4}
+            </View>
+            <Text style={[styles.ratingValue, { color: theme.accent }]}>{rating}/10</Text>
+            <Text style={[styles.reviewLabel, { color: theme.text }]}>Comentario (opcional):</Text>
+            <TextInput
+              style={[styles.reviewInput, { color: theme.text, backgroundColor: theme.overlay, borderColor: theme.border }]}
+              placeholder="¿Qué te pareció esta película?"
+              placeholderTextColor={theme.textSecondary}
+              value={review}
+              onChangeText={setReview}
+              multiline
+              numberOfLines={4}
+            />
+            <Text style={[styles.reviewLabel, { color: theme.text }]}>Fecha de visualización:</Text>
+            <TouchableOpacity
+              style={[styles.datePickerButton, { backgroundColor: theme.overlay }]}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Text style={[styles.datePickerText, { color: theme.text }]}>
+                {watchedDate
+                  ? watchedDate.toLocaleDateString('es-ES')
+                  : 'Selecciona una fecha'}
+              </Text>
+            </TouchableOpacity>
+            {showDatePicker && (
+              <DateTimePicker
+                value={watchedDate}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={(event, selectedDate) => {
+                  setShowDatePicker(false);
+                  if (selectedDate) setWatchedDate(selectedDate);
+                }}
+                maximumDate={new Date()}
               />
-
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={() => setModalVisible(false)}
-                >
-                  <Text style={styles.buttonText}>Cancelar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.saveButton} onPress={saveWatchedMovie}>
-                  <Text style={styles.buttonText}>Guardar</Text>
-                </TouchableOpacity>
-              </View>
+            )}
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.cancelButton, { backgroundColor: theme.textSecondary }]}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.buttonText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveButton, { backgroundColor: theme.accent }]}
+                onPress={isWatched ? handleUpdateWatched : handleSaveWatched}
+              >
+                <Text style={styles.buttonText}>Guardar</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        </Modal>
-      </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Confirmación de eliminación */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={confirmDeleteVisible}
+        onRequestClose={() => setConfirmDeleteVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>¿Eliminar de tu lista?</Text>
+            <Text style={{ color: theme.textSecondary, marginBottom: 20, textAlign: 'center' }}>
+              ¿Seguro que quieres eliminar esta película de tu lista?
+            </Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.cancelButton, { backgroundColor: theme.textSecondary }]}
+                onPress={() => setConfirmDeleteVisible(false)}
+              >
+                <Text style={styles.buttonText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.removeButton, { backgroundColor: '#dc3545' }]}
+                onPress={async () => {
+                  setConfirmDeleteVisible(false);
+                  await handleRemoveWatched();
+                }}
+              >
+                <Text style={styles.buttonText}>Eliminar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -237,211 +413,248 @@ export const MovieDetailScreen: React.FC<MovieDetailScreenProps> = ({ route, nav
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
-  header: {
-    position: 'absolute',
-    top: 40,
-    left: 16,
-    zIndex: 1,
-  },
-  backButton: {
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  backButtonText: {
-    color: 'white',
-    fontWeight: '600',
+  backdropContainer: {
+    position: 'relative',
+    height: 250,
   },
   backdrop: {
     width: '100%',
-    height: 250,
+    height: '100%',
     resizeMode: 'cover',
   },
+  backdropOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
   content: {
-    padding: 16,
+    padding: 20,
+    marginTop: -50,
   },
   movieInfo: {
     flexDirection: 'row',
-    marginBottom: 16,
+    marginBottom: 24,
   },
   poster: {
     width: 120,
     height: 180,
-    borderRadius: 8,
+    borderRadius: 12,
     marginRight: 16,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   details: {
     flex: 1,
     justifyContent: 'center',
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 32,
+    fontWeight: '600',
     marginBottom: 8,
-    color: '#333',
+    fontFamily: 'System',
   },
   releaseDate: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 4,
+    fontSize: 18,
+    marginBottom: 12,
+    fontFamily: 'System',
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   rating: {
     fontSize: 18,
-    color: '#0066cc',
     fontWeight: '600',
-    marginBottom: 4,
+    marginRight: 8,
+    fontFamily: 'System',
   },
   voteCount: {
     fontSize: 14,
-    color: '#999',
+    fontFamily: 'System',
+  },
+  overviewSection: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 24,
+    fontWeight: '500',
+    marginBottom: 12,
+    fontFamily: 'System',
   },
   overview: {
     fontSize: 16,
     lineHeight: 24,
-    color: '#333',
-    marginBottom: 24,
+    fontFamily: 'System',
   },
   watchedInfo: {
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 8,
+    padding: 20,
+    borderRadius: 12,
     marginBottom: 24,
   },
   watchedTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    color: '#333',
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 12,
+    fontFamily: 'System',
   },
   starsContainer: {
     flexDirection: 'row',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   star: {
-    fontSize: 20,
+    fontSize: 24,
     marginRight: 4,
   },
   userRating: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#0066cc',
     marginBottom: 12,
+    fontFamily: 'System',
   },
   reviewTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
     marginBottom: 8,
-    color: '#333',
+    fontFamily: 'System',
   },
   userReview: {
     fontSize: 14,
     lineHeight: 20,
-    color: '#666',
     marginBottom: 12,
+    fontFamily: 'System',
   },
   watchedDate: {
     fontSize: 14,
-    color: '#999',
+    fontFamily: 'System',
   },
   buttonContainer: {
+    marginBottom: 20,
+  },
+  actionButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    gap: 12,
+  },
+  buttonFlex: {
+    flex: 1,
   },
   watchedButton: {
-    backgroundColor: '#0066cc',
-    paddingVertical: 12,
+    paddingVertical: 16,
     paddingHorizontal: 24,
-    borderRadius: 8,
-    flex: 1,
+    borderRadius: 12,
     alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   editButton: {
-    backgroundColor: '#28a745',
-    paddingVertical: 12,
+    paddingVertical: 16,
     paddingHorizontal: 24,
-    borderRadius: 8,
-    flex: 1,
+    borderRadius: 12,
     alignItems: 'center',
-    marginRight: 8,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   removeButton: {
-    backgroundColor: '#dc3545',
-    paddingVertical: 12,
+    paddingVertical: 16,
     paddingHorizontal: 24,
-    borderRadius: 8,
-    flex: 1,
+    borderRadius: 12,
     alignItems: 'center',
-    marginLeft: 8,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   buttonText: {
-    color: 'white',
+    color: '#FFFFFF',
     fontWeight: '600',
     fontSize: 16,
+    fontFamily: 'System',
   },
   modalContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
   },
   modalContent: {
-    backgroundColor: 'white',
     padding: 24,
-    borderRadius: 12,
+    borderRadius: 16,
     width: '90%',
     maxWidth: 400,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 16,
+    fontSize: 24,
+    fontWeight: '600',
+    marginBottom: 20,
     textAlign: 'center',
-    color: '#333',
+    fontFamily: 'System',
   },
   ratingLabel: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 8,
-    color: '#333',
+    marginBottom: 12,
+    fontFamily: 'System',
+  },
+  ratingValue: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 16,
+    fontFamily: 'System',
   },
   reviewLabel: {
     fontSize: 16,
     fontWeight: '600',
-    marginTop: 16,
     marginBottom: 8,
-    color: '#333',
+    fontFamily: 'System',
   },
   reviewInput: {
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 8,
     padding: 12,
-    marginBottom: 16,
+    marginBottom: 20,
     textAlignVertical: 'top',
+    fontFamily: 'System',
+  },
+  datePickerButton: {
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  datePickerText: {
+    fontSize: 16,
+    fontFamily: 'System',
   },
   modalButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    gap: 12,
   },
   cancelButton: {
-    backgroundColor: '#6c757d',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
     flex: 1,
     alignItems: 'center',
-    marginRight: 8,
   },
   saveButton: {
-    backgroundColor: '#0066cc',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
     flex: 1,
     alignItems: 'center',
-    marginLeft: 8,
   },
 });

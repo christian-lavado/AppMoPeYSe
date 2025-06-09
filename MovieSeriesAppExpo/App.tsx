@@ -3,6 +3,17 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { storageService } from './src/services/storage';
+import { ThemeProvider, useTheme } from './src/styles/ThemeContext';
+
+function MainApp() {
+  const { theme } = useTheme();
+  return (
+    <>
+      <StatusBar style={theme.mode === 'dark' ? 'light' : 'dark'} backgroundColor={theme.background} />
+      <AppNavigator />
+    </>
+  );
+}
 
 export default function App() {
   useEffect(() => {
@@ -19,9 +30,10 @@ export default function App() {
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <StatusBar style="light" backgroundColor="#0066cc" />
-      <AppNavigator />
-    </SafeAreaProvider>
+    <ThemeProvider>
+      <SafeAreaProvider>
+        <MainApp />
+      </SafeAreaProvider>
+    </ThemeProvider>
   );
 }

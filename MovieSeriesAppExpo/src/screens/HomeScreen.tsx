@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { tmdbApi } from '../services/tmdb';
 import { Movie, TVShow } from '../types';
@@ -18,6 +19,8 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList, TabParamList } from '../navigation/AppNavigator';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../styles/ThemeContext';
+import Logo from '../../assets/logo.png';
 
 const TMDB_IMAGE_BASE_URL = Constants.expoConfig?.extra?.TMDB_IMAGE_BASE_URL || 'https://image.tmdb.org/t/p/w500';
 
@@ -36,6 +39,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const [tvShows, setTVShows] = useState<TVShow[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'movies' | 'tv'>('movies');
+  const [searchFocused, setSearchFocused] = useState(false);
+  const scaleAnim = new Animated.Value(1);
+
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     loadPopularContent();
@@ -80,92 +87,178 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     }
   };
 
+  const clearSearch = () => {
+    setSearchQuery('');
+    loadPopularContent();
+  };
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.97,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  };
+
   const renderMovieItem = ({ item }: { item: Movie }) => (
-    <TouchableOpacity
-      style={styles.itemContainer}
-      onPress={() => navigation.navigate('MovieDetail', { movie: item })}
-    >
-      <Image
-        source={{
-          uri: item.poster_path
-            ? `${TMDB_IMAGE_BASE_URL}${item.poster_path}`
-            : 'https://via.placeholder.com/500x750?text=No+Image',
-        }}
-        style={styles.poster}
-      />
-      <View style={styles.itemInfo}>
-        <Text style={styles.title} numberOfLines={2}>
-          {item.title}
-        </Text>
-        <Text style={styles.releaseDate}>{item.release_date}</Text>
-        <Text style={styles.rating}>⭐ {item.vote_average.toFixed(1)}</Text>
-      </View>
-    </TouchableOpacity>
+    <Animated.View style={[styles.cardContainer, { transform: [{ scale: scaleAnim }] }]}>
+      <TouchableOpacity
+        style={[styles.card, { backgroundColor: theme.card }]}
+        onPress={() => navigation.navigate('MovieDetail', { movie: item })}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={0.9}
+      >
+        <View style={styles.imageContainer}>
+          <Image
+            source={{
+              uri: item.poster_path
+                ? `${TMDB_IMAGE_BASE_URL}${item.poster_path}`
+                : 'https://via.placeholder.com/500x750?text=No+Image',
+            }}
+            style={styles.poster}
+          />
+          <View style={[styles.overlay, { backgroundColor: theme.overlay }]}>
+            <Text style={[styles.overlayTitle, { color: theme.text }]} numberOfLines={2}>
+              {item.title}
+            </Text>
+            <TouchableOpacity style={[styles.detailsButton, { backgroundColor: theme.accent }]}>
+              <Text style={styles.detailsButtonText}>Ver Detalles</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        <View style={styles.cardInfo}>
+          <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={2}>
+            {item.title}
+          </Text>
+          <View style={styles.metadata}>
+            <Text style={[styles.year, { color: theme.textSecondary }]}>{item.release_date?.split('-')[0] || 'N/A'}</Text>
+            <View style={styles.rating}>
+              <Text style={styles.ratingText}>⭐ {item.vote_average.toFixed(1)}</Text>
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
   );
 
   const renderTVItem = ({ item }: { item: TVShow }) => (
-    <TouchableOpacity
-      style={styles.itemContainer}
-      onPress={() => navigation.navigate('TVDetail', { tvShow: item })}
-    >
-      <Image
-        source={{
-          uri: item.poster_path
-            ? `${TMDB_IMAGE_BASE_URL}${item.poster_path}`
-            : 'https://via.placeholder.com/500x750?text=No+Image',
-        }}
-        style={styles.poster}
-      />
-      <View style={styles.itemInfo}>
-        <Text style={styles.title} numberOfLines={2}>
-          {item.name}
-        </Text>
-        <Text style={styles.releaseDate}>{item.first_air_date}</Text>
-        <Text style={styles.rating}>⭐ {item.vote_average.toFixed(1)}</Text>
-      </View>
-    </TouchableOpacity>
+    <Animated.View style={[styles.cardContainer, { transform: [{ scale: scaleAnim }] }]}>
+      <TouchableOpacity
+        style={[styles.card, { backgroundColor: theme.card }]}
+        onPress={() => navigation.navigate('TVDetail', { tvShow: item })}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={0.9}
+      >
+        <View style={styles.imageContainer}>
+          <Image
+            source={{
+              uri: item.poster_path
+                ? `${TMDB_IMAGE_BASE_URL}${item.poster_path}`
+                : 'https://via.placeholder.com/500x750?text=No+Image',
+            }}
+            style={styles.poster}
+          />
+          <View style={[styles.overlay, { backgroundColor: theme.overlay }]}>
+            <Text style={[styles.overlayTitle, { color: theme.text }]} numberOfLines={2}>
+              {item.name}
+            </Text>
+            <TouchableOpacity style={[styles.detailsButton, { backgroundColor: theme.accent }]}>
+              <Text style={styles.detailsButtonText}>Ver Detalles</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        <View style={styles.cardInfo}>
+          <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={2}>
+            {item.name}
+          </Text>
+          <View style={styles.metadata}>
+            <Text style={[styles.year, { color: theme.textSecondary }]}>{item.first_air_date?.split('-')[0] || 'N/A'}</Text>
+            <View style={styles.rating}>
+              <Text style={styles.ratingText}>⭐ {item.vote_average.toFixed(1)}</Text>
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
   );
 
   return (
-    <SafeAreaView edges={['left', 'right']} style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>AppMoPeYSe</Text>
+    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Header con navbar fija */}
+      <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+        <View style={styles.headerContent}>
+          <Image source={Logo} style={styles.logo} />
+          <Text style={[styles.headerTitle, { color: theme.text }]}>Your Fi&amp;Se</Text>
+          <TouchableOpacity onPress={toggleTheme} style={{ marginLeft: 12 }}>
+            <Text style={{ fontSize: 20 }}>
+              {theme.mode === 'dark' ? '☀️' : '🌑'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar películas o series..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          onSubmitEditing={searchContent}
-        />
-        <TouchableOpacity style={styles.searchButton} onPress={searchContent}>
-          <Text style={styles.searchButtonText}>🔍</Text>
-        </TouchableOpacity>
+      {/* Barra de búsqueda */}
+      <View style={[styles.searchSection, { backgroundColor: theme.card }]}>
+        <View style={[
+          styles.searchContainer,
+          { backgroundColor: theme.overlay, borderColor: searchFocused ? theme.accent : 'transparent' }
+        ]}>
+          <TouchableOpacity onPress={searchContent} style={styles.searchButton}>
+            <Text style={[styles.searchIcon, { color: theme.textSecondary }]}>🔍</Text>
+          </TouchableOpacity>
+          <TextInput
+            style={[styles.searchInput, { color: theme.text }]}
+            placeholder="Busca tu serie o película..."
+            placeholderTextColor={theme.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={searchContent}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+              <Text style={[styles.clearIcon, { color: theme.textSecondary }]}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
-      <View style={styles.tabContainer}>
+      {/* Pestañas de filtro */}
+      <View style={[styles.tabSection, { backgroundColor: theme.overlay }]}>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'movies' && styles.activeTab]}
+          style={[styles.tab, activeTab === 'movies' && { backgroundColor: theme.accent }]}
           onPress={() => setActiveTab('movies')}
         >
-          <Text style={[styles.tabText, activeTab === 'movies' && styles.activeTabText]}>
+          <Text style={[styles.tabText, activeTab === 'movies' && { color: theme.text } ]}>
             Películas
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'tv' && styles.activeTab]}
+          style={[styles.tab, activeTab === 'tv' && { backgroundColor: theme.accent }]}
           onPress={() => setActiveTab('tv')}
         >
-          <Text style={[styles.tabText, activeTab === 'tv' && styles.activeTabText]}>
+          <Text style={[styles.tabText, activeTab === 'tv' && { color: theme.text } ]}>
             Series
           </Text>
         </TouchableOpacity>
       </View>
 
+      {/* Contenido principal */}
       {loading ? (
-        <ActivityIndicator size="large" color="#0066cc" style={styles.loading} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.accent} />
+          <Text style={[styles.loadingText, { color: theme.text }]}>Cargando...</Text>
+        </View>
       ) : (
         <FlatList
           data={activeTab === 'movies' ? movies : tvShows}
@@ -174,6 +267,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           numColumns={2}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContainer}
+          columnWrapperStyle={styles.row}
         />
       )}
     </SafeAreaView>
@@ -183,113 +277,173 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   header: {
+    height: 60,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+  },
+  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#0066cc',
+  },
+  logo: {
+    width: 36,
+    height: 36,
+    resizeMode: 'contain',
+    marginRight: 10,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
+    fontSize: 22,
+    fontWeight: '600',
+    fontFamily: 'System',
+    flex: 1,
+  },
+  searchSection: {
+    padding: 16,
   },
   searchContainer: {
     flexDirection: 'row',
-    padding: 16,
-    backgroundColor: 'white',
+    alignItems: 'center',
+    borderRadius: 25,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 2,
+  },
+  searchButton: {
+    padding: 4,
+    marginRight: 8,
+  },
+  searchIcon: {
+    fontSize: 18,
   },
   searchInput: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginRight: 8,
+    fontSize: 16,
+    fontFamily: 'System',
   },
-  searchButton: {
-    backgroundColor: '#0066cc',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    justifyContent: 'center',
+  clearButton: {
+    padding: 4,
+    marginLeft: 8,
   },
-  searchButtonText: {
-    fontSize: 18,
+  clearIcon: {
+    fontSize: 16,
   },
-  tabContainer: {
+  tabSection: {
     flexDirection: 'row',
-    backgroundColor: 'white',
     marginHorizontal: 16,
     marginBottom: 16,
-    borderRadius: 8,
-    overflow: 'hidden',
+    borderRadius: 25,
+    padding: 4,
   },
   tab: {
     flex: 1,
     paddingVertical: 12,
     alignItems: 'center',
-    backgroundColor: '#f0f0f0',
-  },
-  activeTab: {
-    backgroundColor: '#0066cc',
+    borderRadius: 20,
   },
   tabText: {
-    fontWeight: '600',
-    color: '#666',
+    fontWeight: '500',
+    fontSize: 14,
+    fontFamily: 'System',
+    color: '#999999',
   },
-  activeTabText: {
-    color: 'white',
-  },
-  loading: {
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontFamily: 'System',
   },
   listContainer: {
-    padding: 8,
-    paddingBottom: 0,
+    padding: 16,
+    paddingTop: 0,
   },
-  itemContainer: {
-    flex: 1,
-    margin: 8,
-    backgroundColor: 'white',
-    borderRadius: 8,
+  row: {
+    justifyContent: 'space-between',
+  },
+  cardContainer: {
+    width: '48%',
+    marginBottom: 20,
+  },
+  card: {
+    borderRadius: 12,
     overflow: 'hidden',
-    elevation: 3,
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  imageContainer: {
+    position: 'relative',
   },
   poster: {
     width: '100%',
-    height: 200,
+    aspectRatio: 2 / 3,
     resizeMode: 'cover',
+    borderRadius: 12,
   },
-  itemInfo: {
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    opacity: 0,
     padding: 12,
   },
-  title: {
+  overlayTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 12,
+    fontFamily: 'System',
   },
-  releaseDate: {
+  detailsButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  detailsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+    fontFamily: 'System',
+  },
+  cardInfo: {
+    padding: 12,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    fontFamily: 'System',
+  },
+  metadata: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  year: {
     fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
+    fontFamily: 'System',
   },
   rating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ratingText: {
     fontSize: 14,
-    color: '#0066cc',
-    fontWeight: '600',
+    color: '#FFB74D',
+    fontWeight: '500',
+    fontFamily: 'System',
   },
 });

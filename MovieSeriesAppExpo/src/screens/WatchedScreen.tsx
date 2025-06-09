@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,20 +6,21 @@ import {
   TouchableOpacity,
   Image,
   StyleSheet,
-  Alert,
-  RefreshControl,
   ActivityIndicator,
+  Animated,
+  Alert,
 } from 'react-native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { WatchedItem } from '../types';
-import { storageService as databaseService } from '../services/storage';
+import { storageService } from '../services/storage';
+import { tmdbApi } from '../services/tmdb';
+import { WatchedItem, Movie, TVShow } from '../types';
 import Constants from 'expo-constants';
-import { useFocusEffect } from '@react-navigation/native';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList, TabParamList } from '../navigation/AppNavigator';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../styles/ThemeContext';
 
 const TMDB_IMAGE_BASE_URL = Constants.expoConfig?.extra?.TMDB_IMAGE_BASE_URL || 'https://image.tmdb.org/t/p/w500';
 
@@ -38,185 +39,279 @@ export const WatchedScreen: React.FC<WatchedScreenProps> = ({ navigation }) => {
   const [filter, setFilter] = useState<'all' | 'movie' | 'tv'>('all');
   const [loading, setLoading] = useState(false);
   const [sortBy, setSortBy] = useState<'date' | 'rating' | 'title'>('date');
+  const scaleAnim = new Animated.Value(1);
 
-  console.log('WatchedScreen: Component rendered');
+  const { theme, toggleTheme } = useTheme();
 
   useFocusEffect(
     useCallback(() => {
-      console.log('WatchedScreen: useFocusEffect triggered');
       loadWatchedItems();
     }, [])
   );
 
   const loadWatchedItems = async () => {
-    console.log('WatchedScreen: loadWatchedItems started');
     setLoading(true);
     try {
-      await databaseService.initDB();
-      console.log('WatchedScreen: Database initialized');
-      
-      const items = await databaseService.getWatchedItems();
-      console.log('WatchedScreen: Items loaded:', items.length);
-      
+      const items = await storageService.getWatchedItems();
       setWatchedItems(items);
       applyFilterAndSort(items, filter, sortBy);
     } catch (error) {
-      console.error('WatchedScreen: Error loading items:', error);
-      Alert.alert('Error', 'No se pudieron cargar las películas/series vistas');
+      console.error('WatchedScreen: Error loading watched items:', error);
     } finally {
       setLoading(false);
-      console.log('WatchedScreen: Loading finished');
     }
   };
 
   const applyFilterAndSort = (items: WatchedItem[], currentFilter: typeof filter, currentSort: typeof sortBy) => {
-    console.log('WatchedScreen: Applying filter and sort', { currentFilter, currentSort, itemsCount: items.length });
-    
     let filtered = items;
 
-    // Aplicar filtro
     if (currentFilter !== 'all') {
       filtered = items.filter(item => item.type === currentFilter);
     }
 
-    // Aplicar ordenamiento
     filtered.sort((a, b) => {
       switch (currentSort) {
-        case 'date':
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
         case 'rating':
-          return b.user_rating - a.user_rating;
+          return b.rating - a.rating;
         case 'title':
           return a.title.localeCompare(b.title);
+        case 'date':
         default:
-          return 0;
+          return new Date(b.watchedDate).getTime() - new Date(a.watchedDate).getTime();
       }
     });
 
-    console.log('WatchedScreen: Filtered items:', filtered.length);
     setFilteredItems(filtered);
   };
 
   const handleFilterChange = (newFilter: typeof filter) => {
-    console.log('WatchedScreen: Filter changed to:', newFilter);
     setFilter(newFilter);
     applyFilterAndSort(watchedItems, newFilter, sortBy);
   };
 
   const handleSortChange = (newSort: typeof sortBy) => {
-    console.log('WatchedScreen: Sort changed to:', newSort);
     setSortBy(newSort);
     applyFilterAndSort(watchedItems, filter, newSort);
   };
 
-  const renderWatchedItem = ({ item }: { item: WatchedItem }) => (
-    <TouchableOpacity style={styles.itemContainer}>
-      <Image
-        source={{
-          uri: item.poster_path
-            ? `${TMDB_IMAGE_BASE_URL}${item.poster_path}`
-            : 'https://via.placeholder.com/500x750?text=No+Image',
-        }}
-        style={styles.poster}
-      />
-      <View style={styles.itemInfo}>
-        <Text style={styles.title} numberOfLines={2}>
-          {item.title}
-        </Text>
-        <Text style={styles.type}>
-          {item.type === 'movie' ? 'Película' : 'Serie'}
-        </Text>
-        <Text style={styles.rating}>
-          Mi puntuación: ⭐ {item.user_rating}/10
-        </Text>
-        <Text style={styles.date}>
-          Visto: {new Date(item.watched_date).toLocaleDateString()}
-        </Text>
-        {item.user_review && (
-          <Text style={styles.review} numberOfLines={2}>
-            "{item.user_review}"
-          </Text>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.97,
+      useNativeDriver: true,
+    }).start();
+  };
 
-  console.log('WatchedScreen: Rendering with state:', { 
-    loading, 
-    watchedItemsCount: watchedItems.length, 
-    filteredItemsCount: filteredItems.length,
-    filter,
-    sortBy 
-  });
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handleItemPress = async (item: WatchedItem) => {
+    try {
+      if (item.type === 'movie') {
+        const movieData = await tmdbApi.getMovieDetails(item.id);
+        const movie: Movie = {
+          id: movieData.id,
+          title: movieData.title,
+          poster_path: movieData.poster_path,
+          backdrop_path: movieData.backdrop_path,
+          overview: movieData.overview,
+          release_date: movieData.release_date,
+          vote_average: movieData.vote_average,
+          vote_count: movieData.vote_count,
+          adult: movieData.adult,
+          genre_ids: movieData.genres?.map(g => g.id) || [],
+          original_language: movieData.original_language,
+          original_title: movieData.original_title,
+          popularity: movieData.popularity,
+          video: movieData.video || false
+        };
+        navigation.navigate('MovieDetail', { movie });
+      } else {
+        const tvData = await tmdbApi.getTVDetails(item.id);
+        const tvShow: TVShow = {
+          id: tvData.id,
+          name: tvData.name,
+          poster_path: tvData.poster_path,
+          backdrop_path: tvData.backdrop_path,
+          overview: tvData.overview,
+          first_air_date: tvData.first_air_date,
+          vote_average: tvData.vote_average,
+          vote_count: tvData.vote_count,
+          genre_ids: tvData.genres?.map(g => g.id) || [],
+          origin_country: tvData.origin_country,
+          original_language: tvData.original_language,
+          original_name: tvData.original_name,
+          popularity: tvData.popularity,
+          adult: tvData.adult || false
+        };
+        navigation.navigate('TVDetail', { tvShow });
+      }
+    } catch (error) {
+      console.error('Error fetching details:', error);
+      Alert.alert('Error', 'No se pudieron cargar los detalles. Inténtalo de nuevo.');
+    }
+  };
+
+  const renderWatchedItem = ({ item }: { item: WatchedItem }) => (
+    <Animated.View style={[styles.cardContainer, { transform: [{ scale: scaleAnim }] }]}>
+      <TouchableOpacity
+        style={[styles.card, { backgroundColor: theme.card }]}
+        onPress={() => handleItemPress(item)}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={0.9}
+      >
+        <View style={styles.imageContainer}>
+          <Image
+            source={{
+              uri: item.posterPath
+                ? `${TMDB_IMAGE_BASE_URL}${item.posterPath}`
+                : 'https://via.placeholder.com/500x750?text=No+Image',
+            }}
+            style={styles.poster}
+          />
+          <View style={styles.overlay}>
+            <View style={styles.ratingBadge}>
+              <Text style={styles.ratingBadgeText}>★ {item.rating}/10</Text>
+            </View>
+          </View>
+        </View>
+        <View style={styles.cardInfo}>
+          <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={2}>
+            {item.title}
+          </Text>
+          <View style={styles.metadata}>
+            <Text style={[
+              styles.type,
+              item.type === 'movie' ? { color: theme.accent } : { color: theme.accentSecondary }
+            ]}>
+              {item.type === 'movie' ? '🎬 Película' : '📺 Serie'}
+            </Text>
+            <Text style={[styles.date, { color: theme.textSecondary }]}>
+              {new Date(item.watchedDate).toLocaleDateString('es-ES', { 
+                day: '2-digit', 
+                month: '2-digit' 
+              })}
+            </Text>
+          </View>
+          {item.review && (
+            <Text style={[styles.review, { color: theme.textSecondary }]} numberOfLines={2}>
+              "{item.review}"
+            </Text>
+          )}
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0066cc" />
-        <Text>Cargando...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.accent} />
+        <Text style={[styles.loadingText, { color: theme.text }]}>Cargando...</Text>
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Películas y Series Vistas</Text>
+    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+        <View style={styles.headerContent}>
+          <View style={styles.titleContainer}>
+            <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1} adjustsFontSizeToFit>
+              Mi Cinemateca 🎬
+            </Text>
+          </View>
+          <TouchableOpacity onPress={toggleTheme} style={styles.themeButton}>
+            <Text style={styles.themeIcon}>
+              {theme.mode === 'dark' ? '☀️' : '🌑'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>{filteredItems.length} elementos</Text>
       </View>
 
       {/* Filtros */}
-      <View style={styles.filtersContainer}>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'all' && styles.activeFilter]}
-          onPress={() => handleFilterChange('all')}
-        >
-          <Text style={[styles.filterText, filter === 'all' && styles.activeFilterText]}>
-            Todas
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'movie' && styles.activeFilter]}
-          onPress={() => handleFilterChange('movie')}
-        >
-          <Text style={[styles.filterText, filter === 'movie' && styles.activeFilterText]}>
-            Películas
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'tv' && styles.activeFilter]}
-          onPress={() => handleFilterChange('tv')}
-        >
-          <Text style={[styles.filterText, filter === 'tv' && styles.activeFilterText]}>
-            Series
-          </Text>
-        </TouchableOpacity>
+      <View style={[styles.filtersSection, { backgroundColor: theme.card }]}>
+        <View style={[styles.filterRow, { backgroundColor: theme.overlay }]}>
+          <TouchableOpacity
+            style={[styles.filterButton, filter === 'all' && { backgroundColor: theme.accent }]}
+            onPress={() => handleFilterChange('all')}
+          >
+            <Text style={[styles.filterText, filter === 'all' && { color: theme.text }]}>
+              Todas
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterButton, filter === 'movie' && { backgroundColor: theme.accent }]}
+            onPress={() => handleFilterChange('movie')}
+          >
+            <Text style={[styles.filterText, filter === 'movie' && { color: theme.text }]}>
+              Películas
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterButton, filter === 'tv' && { backgroundColor: theme.accent }]}
+            onPress={() => handleFilterChange('tv')}
+          >
+            <Text style={[styles.filterText, filter === 'tv' && { color: theme.text }]}>
+              Series
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Ordenamiento */}
+        <View style={styles.sortRow}>
+          <Text style={[styles.sortLabel, { color: theme.text }]}>Ordenar por:</Text>
+          <TouchableOpacity
+            style={[styles.sortButton, sortBy === 'date' && { backgroundColor: theme.accentSecondary }]}
+            onPress={() => handleSortChange('date')}
+          >
+            <Text style={[styles.sortText, sortBy === 'date' && { color: theme.background }]}>
+              Fecha
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.sortButton, sortBy === 'rating' && { backgroundColor: theme.accentSecondary }]}
+            onPress={() => handleSortChange('rating')}
+          >
+            <Text style={[styles.sortText, sortBy === 'rating' && { color: theme.background }]}>
+              Calificación
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.sortButton, sortBy === 'title' && { backgroundColor: theme.accentSecondary }]}
+            onPress={() => handleSortChange('title')}
+          >
+            <Text style={[styles.sortText, sortBy === 'title' && { color: theme.background }]}>
+              Título
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
+      {/* Lista */}
       {filteredItems.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>
-            {watchedItems.length === 0 
-              ? 'No tienes películas o series marcadas como vistas'
-              : `No hay ${filter === 'movie' ? 'películas' : filter === 'tv' ? 'series' : 'elementos'} en esta categoría`
-            }
-          </Text>
-          <Text style={styles.emptySubtext}>
-            Ve a buscar contenido y márcalo como visto para verlo aquí
+          <Text style={styles.emptyIcon}>🎭</Text>
+          <Text style={[styles.emptyText, { color: theme.text }]}>No has visto nada aún</Text>
+          <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
+            Explora y marca tus películas y series favoritas
           </Text>
         </View>
       ) : (
         <FlatList
           data={filteredItems}
-          keyExtractor={(item) => `${item.type}-${item.id}`}
+          keyExtractor={(item) => `${item.id}-${item.type}`}
           renderItem={renderWatchedItem}
+          numColumns={2}
+          showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContainer}
-          refreshControl={
-            <RefreshControl
-              refreshing={loading}
-              onRefresh={loadWatchedItems}
-              colors={['#0066cc']}
-            />
-          }
+          columnWrapperStyle={styles.row}
         />
       )}
     </SafeAreaView>
@@ -224,98 +319,172 @@ export const WatchedScreen: React.FC<WatchedScreenProps> = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontFamily: 'System',
   },
   header: {
-    backgroundColor: '#0066cc',
-    padding: 16,
+    padding: 20,
+    paddingTop: 32,
+    borderBottomWidth: 1,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  titleContainer: {
+    flex: 1,
+    marginRight: 12,
+  },
+  themeButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+  },
+  themeIcon: {
+    fontSize: 24,
+    color: '#999999',
   },
   headerTitle: {
-    color: 'white',
     fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
+    fontWeight: '600',
+    fontFamily: 'System',
+    marginBottom: 4,
   },
-  filtersContainer: {
-    flexDirection: 'row',
+  headerSubtitle: {
+    fontSize: 16,
+    textAlign: 'center',
+    fontFamily: 'System',
+  },
+  filtersSection: {
     padding: 16,
-    backgroundColor: 'white',
+  },
+  filterRow: {
+    flexDirection: 'row',
     justifyContent: 'space-around',
+    marginBottom: 16,
+    borderRadius: 25,
+    padding: 4,
   },
   filterButton: {
     paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 20,
-    backgroundColor: '#e0e0e0',
-  },
-  activeFilter: {
-    backgroundColor: '#0066cc',
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 2,
   },
   filterText: {
-    color: '#666',
     fontWeight: '500',
+    fontSize: 14,
+    fontFamily: 'System',
+    color: '#999999',
   },
-  activeFilterText: {
-    color: 'white',
+  sortRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sortLabel: {
+    fontSize: 14,
+    marginRight: 12,
+    fontFamily: 'System',
+  },
+  sortButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    marginHorizontal: 4,
+  },
+  sortText: {
+    fontSize: 12,
+    fontWeight: '500',
+    fontFamily: 'System',
+    color: '#999999',
   },
   listContainer: {
     padding: 16,
-    paddingBottom: 0,
   },
-  itemContainer: {
-    flexDirection: 'row',
-    backgroundColor: 'white',
-    borderRadius: 8,
-    marginBottom: 12,
-    padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  poster: {
-    width: 80,
-    height: 120,
-    borderRadius: 8,
-    backgroundColor: '#e0e0e0',
-  },
-  itemInfo: {
-    flex: 1,
-    marginLeft: 12,
+  row: {
     justifyContent: 'space-between',
   },
-  title: {
+  cardContainer: {
+    width: '48%',
+    marginBottom: 20,
+  },
+  card: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  imageContainer: {
+    position: 'relative',
+  },
+  poster: {
+    width: '100%',
+    aspectRatio: 2 / 3,
+    resizeMode: 'cover',
+    borderRadius: 12,
+  },
+  overlay: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+  },
+  ratingBadge: {
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  ratingBadgeText: {
+    color: '#FFB74D',
+    fontSize: 12,
+    fontWeight: '600',
+    fontFamily: 'System',
+  },
+  cardInfo: {
+    padding: 12,
+  },
+  cardTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '600',
+    marginBottom: 8,
+    fontFamily: 'System',
+  },
+  metadata: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
   },
   type: {
-    fontSize: 14,
-    color: '#0066cc',
+    fontSize: 12,
     fontWeight: '500',
-  },
-  rating: {
-    fontSize: 14,
-    color: '#666',
+    fontFamily: 'System',
   },
   date: {
     fontSize: 12,
-    color: '#999',
+    fontFamily: 'System',
   },
   review: {
     fontSize: 12,
-    color: '#666',
     fontStyle: 'italic',
-    marginTop: 4,
+    fontFamily: 'System',
   },
   emptyContainer: {
     flex: 1,
@@ -323,15 +492,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 32,
   },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
   emptyText: {
-    fontSize: 18,
-    color: '#666',
+    fontSize: 24,
     textAlign: 'center',
     marginBottom: 8,
+    fontWeight: '600',
+    fontFamily: 'System',
   },
   emptySubtext: {
-    fontSize: 14,
-    color: '#999',
+    fontSize: 16,
     textAlign: 'center',
+    fontFamily: 'System',
   },
 });

@@ -27,6 +27,11 @@ export interface TMDBTVResponse {
   total_results: number;
 }
 
+export interface TMDBCountry {
+  iso_3166_1: string;
+  english_name: string;
+}
+
 export const tmdbApi = {
   // Obtener películas populares
   getPopularMovies: async (page: number = 1): Promise<TMDBMovieResponse> => {
@@ -100,5 +105,68 @@ export const tmdbApi = {
       console.error('Error fetching TV show details:', error);
       throw new Error('No se pudieron cargar los detalles de la serie');
     }
+  },
+
+  // Obtener lista de países
+  getCountries: async (): Promise<TMDBCountry[]> => {
+    try {
+      const response = await tmdbAxios.get('/configuration/countries');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching countries:', error);
+      throw new Error('No se pudieron cargar los países');
+    }
+  },
+
+  // Películas top por año, país y cantidad
+  getTopRatedMovies: async ({
+    year,
+    country,
+    count,
+  }: { year: number; country?: string; count: number }) => {
+    let results: Movie[] = [];
+    let page = 1;
+    while (results.length < count) {
+      const response = await tmdbAxios.get('/discover/movie', {
+        params: {
+          sort_by: 'vote_average.desc',
+          'vote_count.gte': 100, // Para evitar pelis con pocos votos
+          primary_release_year: year,
+          region: country,
+          page,
+          language: 'es-ES',
+        },
+      });
+      results = results.concat(response.data.results);
+      if (response.data.page >= response.data.total_pages) break;
+      page++;
+    }
+    return results.slice(0, count);
+  },
+
+  // Series top por año, país y cantidad
+  getTopRatedTVShows: async ({
+    year,
+    country,
+    count,
+  }: { year: number; country?: string; count: number }) => {
+    let results: TVShow[] = [];
+    let page = 1;
+    while (results.length < count) {
+      const response = await tmdbAxios.get('/discover/tv', {
+        params: {
+          sort_by: 'vote_average.desc',
+          'vote_count.gte': 100,
+          first_air_date_year: year,
+          with_origin_country: country,
+          page,
+          language: 'es-ES',
+        },
+      });
+      results = results.concat(response.data.results);
+      if (response.data.page >= response.data.total_pages) break;
+      page++;
+    }
+    return results.slice(0, count);
   },
 };

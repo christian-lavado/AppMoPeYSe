@@ -42,3 +42,11 @@ export interface WatchedItem {
   watched_date: string;
   created_at: string;
 }
+
+
+export type SavedItem = {
+  id: number;
+  type: 'movie' | 'tv';
+  title: string;
+  posterPath: string | null;
+};
