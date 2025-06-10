@@ -2,8 +2,8 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Text, View, StyleSheet, Platform, StatusBar } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Text, View, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { HomeScreen } from '../screens/HomeScreen';
 import { MovieDetailScreen } from '../screens/MovieDetailScreen';
 import { TVDetailScreen } from '../screens/TVDetailScreen';
@@ -118,9 +118,6 @@ const MainTabs = () => {
 
 export const AppNavigator: React.FC = () => {
   const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
-
-  const statusBarHeight = Platform.OS === "android" ? StatusBar.currentHeight || 0 : insets.top;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['bottom']}>
@@ -136,47 +133,14 @@ export const AppNavigator: React.FC = () => {
           <Stack.Screen 
             name="MainTabs" 
             component={MainTabs}
-            options={{ headerShown: false }} 
           />
           <Stack.Screen 
             name="MovieDetail" 
             component={MovieDetailScreen}
-            options={{
-              headerShown: true,
-              title: 'Detalles de Película',
-              headerStyle: {
-                backgroundColor: theme.card,
-                paddingTop: statusBarHeight,
-                height: 56 + statusBarHeight,
-              },
-              headerTintColor: theme.text,
-              headerTitleStyle: {
-                fontWeight: '600',
-                fontSize: 18,
-                fontFamily: 'System',
-              },
-              headerBackTitle: '',
-            }}
           />
           <Stack.Screen 
             name="TVDetail" 
             component={TVDetailScreen}
-            options={{
-              headerShown: true,
-              title: 'Detalles de Serie',
-              headerStyle: {
-                backgroundColor: theme.card,
-                paddingTop: statusBarHeight,
-                height: 56 + statusBarHeight,
-              },
-              headerTintColor: theme.text,
-              headerTitleStyle: {
-                fontWeight: '600',
-                fontSize: 18,
-                fontFamily: 'System',
-              },
-              headerBackTitle: '',
-            }}
           />
         </Stack.Navigator>
       </NavigationContainer>
