@@ -1,0 +1,36 @@
+MIT License
+
+Copyright (c) 2025 Your Fi&Se - Aplicación Móvil de Películas y Series
+
+Por la presente se concede permiso, libre de cargos, a cualquier persona que obtenga una copia de este software y de los archivos de documentación asociados (el "Software"), a utilizar el Software sin restricción, incluyendo sin limitación los derechos a usar, copiar, modificar, fusionar, publicar, distribuir, sublicenciar, y/o vender copias del Software, y a permitir a las personas a las que se les proporcione el Software a hacer lo mismo, sujeto a las siguientes condiciones:
+
+El aviso de copyright anterior y este aviso de permiso se incluirán en todas las copias o partes sustanciales del Software.
+
+TÉRMINOS DE USO RESPONSABLE:
+- Este software está destinado únicamente para uso personal, educativo y no comercial.
+- No se permite el uso del código para fines comerciales sin autorización expresa por escrito.
+- Los usuarios deben respetar los términos de uso de las APIs de terceros utilizadas.
+- Se prohíbe el uso abusivo, la redistribución masiva o la explotación comercial no autorizada.
+
+ATRIBUCIÓN DE DATOS DE TMDB:
+Este proyecto utiliza la API de The Movie Database (TMDB). Los datos de películas y series son proporcionados por TMDB bajo sus términos de servicio:
+
+- Los datos de TMDB están sujetos a los Términos de Uso de TMDB (https://www.themoviedb.org/documentation/api/terms-of-use).
+- Este producto utiliza la API de TMDB pero no está respaldado ni certificado por TMDB.
+- Los usuarios deben cumplir con las restricciones de uso de TMDB, incluyendo:
+  * Uso personal y no comercial únicamente.
+  * Prohibición de entrenar sistemas de IA/ML con datos de TMDB.
+  * Prohibición de reventa o redistribución de datos de TMDB.
+  * Respeto a los derechos de propiedad intelectual de TMDB y sus contribuyentes.
+
+LIMITACIONES ADICIONALES:
+- El autor del software no se hace responsable del uso indebido de las APIs de terceros.
+- Los usuarios son responsables de obtener sus propias claves de API de TMDB.
+- El cumplimiento de los términos de TMDB es responsabilidad exclusiva del usuario final.
+
+EL SOFTWARE SE PROPORCIONA "COMO ESTÁ", SIN GARANTÍA DE NINGÚN TIPO, EXPRESA O IMPLÍCITA, INCLUYENDO PERO NO LIMITADO A GARANTÍAS DE COMERCIALIZACIÓN, IDONEIDAD PARA UN PROPÓSITO PARTICULAR E INCUMPLIMIENTO. EN NINGÚN CASO LOS AUTORES O PROPIETARIOS DE LOS DERECHOS DE AUTOR SERÁN RESPONSABLES DE NINGUNA RECLAMACIÓN, DAÑOS U OTRAS RESPONSABILIDADES, YA SEA EN UNA ACCIÓN DE CONTRATO, AGRAVIO O CUALQUIER OTRO MOTIVO, DERIVADAS DE, FUERA DE O EN CONEXIÓN CON EL SOFTWARE O SU USO U OTRO TIPO DE ACCIONES EN EL SOFTWARE.
+
+INFORMACIÓN DE CONTACTO:
+Para solicitudes de uso comercial o consultas sobre licencias, contacte al desarrollador a través del repositorio del proyecto.
+
+Última actualización: Junio 2025

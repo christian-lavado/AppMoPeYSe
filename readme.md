@@ -249,6 +249,13 @@ npm run web        # Abrir versión web
 5. Abre un Pull Request
 
 
+### 📄 Licencia
+
+Este proyecto está bajo la Licencia MIT con términos adicionales para uso responsable. Ver el archivo `LICENSE` para más detalles.
+
+**Nota importante**: Este proyecto utiliza la API de TMDB, cuyos datos están sujetos a los [Términos de Uso de TMDB](https://www.themoviedb.org/documentation/api/terms-of-use). Los usuarios deben cumplir con dichos términos.
+
+
 ### 📞 Soporte
 
 Si encuentras algún problema o tienes preguntas:

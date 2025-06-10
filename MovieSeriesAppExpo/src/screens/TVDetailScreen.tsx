@@ -181,7 +181,19 @@ export const TVDetailScreen: React.FC<TVDetailScreenProps> = ({ route, navigatio
   };
 
   return (
-    <SafeAreaView edges={['left', 'right']} style={[styles.container, { backgroundColor: theme.background }]}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Header personalizado */}
+      <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={[styles.backIcon, { color: theme.text }]}>🔙</Text>
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>Detalles de Serie</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Backdrop */}
         <View style={styles.backdropContainer}>
@@ -447,6 +459,34 @@ export const TVDetailScreen: React.FC<TVDetailScreenProps> = ({ route, navigatio
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+  },
+  backIcon: {
+    fontSize: 24,
+    fontWeight: '600',
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    fontFamily: 'System',
+  },
+  headerSpacer: {
+    width: 40,
   },
   backdropContainer: {
     position: 'relative',
